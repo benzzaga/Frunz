@@ -12,29 +12,34 @@ import { profileRouter } from "./routes/profile.js";
 import { refreshExchangeRates } from "./services/currency.js";
 import { pollTronDeposits } from "./services/tronListener.js";
 
-// 1. Создаем приложение express
+// 1. Инициализация Express
 const app = express();
 
-// 2. Подключаем Middleware (CORS строго ДО роутов)
-app.use(cors());
+// 2. Расширенная настройка CORS (строго до роутов)
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
+// Парсинг JSON-тел запросов
 app.use(express.json());
 
-// 3. Подключение к базе данных
+// 3. Подключение к базовому пулу PostgreSQL
 const db = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 app.use((req, _res, next) => {
   req.db = db;
   next();
 });
 
-// 4. Главная страница (чтобы не было "Cannot GET /")
+// 4. Проверка работы сервера
 app.get("/", (_req, res) => {
   res.send("fstore backend работает отлично!");
 });
 
-// 5. Проверка здоровья сервера
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-// 6. Подключение основных маршрутов (поддерживаем оба варианта: с /api и без)
+// 5. Маршруты API (с поддержкой обособленных и префиксных путей)
 app.use("/auth", authRouter);
 app.use("/listings", listingsRouter);
 app.use("/deals", dealsRouter);
@@ -47,14 +52,12 @@ app.use("/api/deals", dealsRouter);
 app.use("/api/reviews", reviewsRouter);
 app.use("/api/profile", profileRouter);
 
-// 7. Фоновые задачи (Cron)
-// Курсы валют обновляются каждые 5 минут
+// 6. Фоновые Cron-задачи
 cron.schedule("*/5 * * * *", () => {
   refreshExchangeRates(db).catch((err) => console.error("Ошибка обновления курсов:", err));
 });
 refreshExchangeRates(db).catch((err) => console.error("Ошибка обновления курсов:", err));
 
-// Блокчейн-слушатель USDT (TRC-20) — проверяет новые поступления каждые 30 секунд
 cron.schedule("*/30 * * * * *", async () => {
   try {
     const { rows } = await db.query(
@@ -81,12 +84,17 @@ cron.schedule("*/30 * * * * *", async () => {
   }
 });
 
-// 8. Единый обработчик ошибок
+// 7. Обработка несуществующих маршрутов (404)
+app.use((_req, res) => {
+  res.status(404).json({ error: "Маршрут не найден" });
+});
+
+// 8. Глобальный обработчик ошибок (500)
 app.use((err, _req, res, _next) => {
-  console.error(err);
+  console.error("Глобальная ошибка сервера:", err);
   res.status(500).json({ error: "Внутренняя ошибка сервера." });
 });
 
-// 9. Запуск сервера
+// 9. Старт сервера
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`fstore backend запущен на порту ${PORT}`));
