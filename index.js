@@ -2,6 +2,10 @@ import "dotenv/config";
 import express from "express";
 import pg from "pg";
 import cron from "node-cron";
+import cors from 'cors';
+
+app.use(cors());
+
 
 import { authRouter } from "./routes/auth.js";
 import { listingsRouter } from "./routes/listings.js";
