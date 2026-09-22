@@ -1,0 +1,19 @@
+{
+  "name": "fstore-backend",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.12.0",
+    "argon2": "^0.40.3",
+    "libphonenumber-js": "^1.11.9",
+    "nodemailer": "^6.9.13",
+    "jsonwebtoken": "^9.0.2",
+    "dotenv": "^16.4.5",
+    "node-cron": "^3.0.3"
+  }
+}
