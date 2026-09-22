@@ -2,10 +2,7 @@ import "dotenv/config";
 import express from "express";
 import pg from "pg";
 import cron from "node-cron";
-import cors from 'cors';
-
-app.use(cors());
-
+import cors from "cors";
 
 import { authRouter } from "./routes/auth.js";
 import { listingsRouter } from "./routes/listings.js";
@@ -15,23 +12,42 @@ import { profileRouter } from "./routes/profile.js";
 import { refreshExchangeRates } from "./services/currency.js";
 import { pollTronDeposits } from "./services/tronListener.js";
 
+// 1. Создаем приложение express
 const app = express();
+
+// 2. Подключаем Middleware (CORS строго ДО роутов)
+app.use(cors());
 app.use(express.json());
 
+// 3. Подключение к базе данных
 const db = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 app.use((req, _res, next) => {
   req.db = db;
   next();
 });
 
+// 4. Главная страница (чтобы не было "Cannot GET /")
+app.get("/", (_req, res) => {
+  res.send("fstore backend работает отлично!");
+});
+
+// 5. Проверка здоровья сервера
+app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// 6. Подключение основных маршрутов (поддерживаем оба варианта: с /api и без)
 app.use("/auth", authRouter);
 app.use("/listings", listingsRouter);
 app.use("/deals", dealsRouter);
 app.use("/reviews", reviewsRouter);
 app.use("/profile", profileRouter);
 
-app.get("/health", (_req, res) => res.json({ ok: true }));
+app.use("/api/auth", authRouter);
+app.use("/api/listings", listingsRouter);
+app.use("/api/deals", dealsRouter);
+app.use("/api/reviews", reviewsRouter);
+app.use("/api/profile", profileRouter);
 
+// 7. Фоновые задачи (Cron)
 // Курсы валют обновляются каждые 5 минут
 cron.schedule("*/5 * * * *", () => {
   refreshExchangeRates(db).catch((err) => console.error("Ошибка обновления курсов:", err));
@@ -51,7 +67,7 @@ cron.schedule("*/30 * * * * *", async () => {
     const { rows: existing } = await db.query(
       `SELECT checkpoint_ms FROM worker_checkpoints WHERE worker_name = 'tron_usdt'`
     );
-    const lastCheckedMs = existing[0].checkpoint_ms;
+    const lastCheckedMs = existing[0]?.checkpoint_ms || Date.now() - 60_000;
 
     const { results, newCheckpoint } = await pollTronDeposits(db, lastCheckedMs);
     await db.query(
@@ -65,11 +81,12 @@ cron.schedule("*/30 * * * * *", async () => {
   }
 });
 
-// Единый обработчик ошибок — чтобы не ронять процесс и не светить стектрейсы наружу
+// 8. Единый обработчик ошибок
 app.use((err, _req, res, _next) => {
   console.error(err);
   res.status(500).json({ error: "Внутренняя ошибка сервера." });
 });
 
+// 9. Запуск сервера
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`fstore backend запущен на порту ${PORT}`));
